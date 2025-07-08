@@ -1,0 +1,298 @@
+version: '3.8'
+
+services:
+  # MySQL Database for User Service
+  mysql-users:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: smartcampus_users
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_users_data:/var/lib/mysql
+    networks:
+      - smartcampus-network
+
+  # MySQL Database for Course Service
+  mysql-courses:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: smartcampus_courses
+    ports:
+      - "3307:3306"
+    volumes:
+      - mysql_courses_data:/var/lib/mysql
+    networks:
+      - smartcampus-network
+
+  # MySQL Database for Enrollment Service
+  mysql-enrollments:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: smartcampus_enrollments
+    ports:
+      - "3308:3306"
+    volumes:
+      - mysql_enrollments_data:/var/lib/mysql
+    networks:
+      - smartcampus-network
+
+  # MySQL Database for Attendance Service
+  mysql-attendance:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: smartcampus_attendance
+    ports:
+      - "3309:3306"
+    volumes:
+      - mysql_attendance_data:/var/lib/mysql
+    networks:
+      - smartcampus-network
+
+  # MySQL Database for Grade Service
+  mysql-grades:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: smartcampus_grades
+    ports:
+      - "3310:3306"
+    volumes:
+      - mysql_grades_data:/var/lib/mysql
+    networks:
+      - smartcampus-network
+
+  # MySQL Database for Schedule Service
+  mysql-schedules:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: smartcampus_schedules
+    ports:
+      - "3311:3306"
+    volumes:
+      - mysql_schedules_data:/var/lib/mysql
+    networks:
+      - smartcampus-network
+
+  # Keycloak Authentication Server
+  keycloak:
+    image: quay.io/keycloak/keycloak:22.0
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_DB: mysql
+      KC_DB_URL: jdbc:mysql://mysql-keycloak:3306/keycloak
+      KC_DB_USERNAME: root
+      KC_DB_PASSWORD: password
+    ports:
+      - "8090:8080"
+    depends_on:
+      - mysql-keycloak
+    command: start-dev
+    networks:
+      - smartcampus-network
+    volumes:
+      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json
+
+  # MySQL Database for Keycloak
+  mysql-keycloak:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: password
+      MYSQL_DATABASE: keycloak
+    ports:
+      - "3312:3306"
+    volumes:
+      - mysql_keycloak_data:/var/lib/mysql
+    networks:
+      - smartcampus-network
+
+  # Eureka Server
+  eureka-server:
+    build:
+      context: ../backend/eureka-server
+      dockerfile: Dockerfile
+    ports:
+      - "8761:8761"
+    networks:
+      - smartcampus-network
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ../backend/api-gateway
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    depends_on:
+      - eureka-server
+      - keycloak
+    networks:
+      - smartcampus-network
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://eureka-server:8761/eureka
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8080/realms/smartcampus
+
+  # User Service
+  user-service:
+    build:
+      context: ../backend/user-service
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+    depends_on:
+      - mysql-users
+      - eureka-server
+      - keycloak
+    networks:
+      - smartcampus-network
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql-users:3306/smartcampus_users?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=password
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://eureka-server:8761/eureka
+      - SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://keycloak:8080/realms/smartcampus
+
+  # Course Service
+  course-service:
+    build:
+      context: ../backend/course-service
+      dockerfile: Dockerfile
+    ports:
+      - "8082:8082"
+    depends_on:
+      - mysql-courses
+      - eureka-server
+    networks:
+      - smartcampus-network
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql-courses:3306/smartcampus_courses?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=password
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://eureka-server:8761/eureka
+
+  # Enrollment Service
+  enrollment-service:
+    build:
+      context: ../backend/enrollment-service
+      dockerfile: Dockerfile
+    ports:
+      - "8083:8083"
+    depends_on:
+      - mysql-enrollments
+      - eureka-server
+    networks:
+      - smartcampus-network
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql-enrollments:3306/smartcampus_enrollments?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=password
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://eureka-server:8761/eureka
+
+  # Attendance Service
+  attendance-service:
+    build:
+      context: ../backend/attendance-service
+      dockerfile: Dockerfile
+    ports:
+      - "8084:8084"
+    depends_on:
+      - mysql-attendance
+      - eureka-server
+    networks:
+      - smartcampus-network
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql-attendance:3306/smartcampus_attendance?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=password
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://eureka-server:8761/eureka
+
+  # Grade Service
+  grade-service:
+    build:
+      context: ../backend/grade-service
+      dockerfile: Dockerfile
+    ports:
+      - "8085:8085"
+    depends_on:
+      - mysql-grades
+      - eureka-server
+    networks:
+      - smartcampus-network
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql-grades:3306/smartcampus_grades?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=password
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://eureka-server:8761/eureka
+
+  # Schedule Service
+  schedule-service:
+    build:
+      context: ../backend/schedule-service
+      dockerfile: Dockerfile
+    ports:
+      - "8086:8086"
+    depends_on:
+      - mysql-schedules
+      - eureka-server
+    networks:
+      - smartcampus-network
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - SPRING_DATASOURCE_URL=jdbc:mysql://mysql-schedules:3306/smartcampus_schedules?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      - SPRING_DATASOURCE_USERNAME=root
+      - SPRING_DATASOURCE_PASSWORD=password
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://eureka-server:8761/eureka
+
+  # Notification Service
+  notification-service:
+    build:
+      context: ../backend/notification-service
+      dockerfile: Dockerfile
+    ports:
+      - "8087:8087"
+    depends_on:
+      - eureka-server
+    networks:
+      - smartcampus-network
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://eureka-server:8761/eureka
+
+  # Angular Frontend
+  smart-campus-ui:
+    build:
+      context: ../frontend/smart-campus-ui
+      dockerfile: Dockerfile
+    ports:
+      - "4200:80"
+    depends_on:
+      - api-gateway
+    networks:
+      - smartcampus-network
+
+volumes:
+  mysql_users_data:
+  mysql_courses_data:
+  mysql_enrollments_data:
+  mysql_attendance_data:
+  mysql_grades_data:
+  mysql_schedules_data:
+  mysql_keycloak_data:
+
+networks:
+  smartcampus-network:
+    driver: bridge
